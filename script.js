@@ -656,10 +656,12 @@ nextSampleBtn.addEventListener("click", () => {
 setModeFull();
 newPatient();
 
-/* ================================
-   ANDROID TOUCH-DRAG SUPPORT
-   (Option A – keeps all your logic)
-   ================================ */
+/* ==========================================
+   ANDROID TOUCH-DRAG SUPPORT (FIXED VERSION)
+   Now supports:
+   ✔ Proper dropping
+   ✔ Needle moves but labels stay in place
+   ========================================== */
 
 function enableTouchDrag(el, type) {
   if (!el) return;
@@ -667,19 +669,34 @@ function enableTouchDrag(el, type) {
   let dragging = false;
   let offsetX = 0, offsetY = 0;
 
+  // The actual moving clone (to avoid moving labels)
+  let ghost = null;
+
   el.addEventListener("touchstart", e => {
-    // Android Chrome sometimes fires ghost mouse events → stop them
     e.preventDefault();
 
     const t = e.touches[0];
     const rect = el.getBoundingClientRect();
 
-    offsetX = t.clientX - rect.left;
-    offsetY = t.clientY - rect.top;
     dragging = true;
 
-    el.classList.add("dragging");
-    el.style.transition = "none";
+    offsetX = t.clientX - rect.left;
+    offsetY = t.clientY - rect.top;
+
+    // CREATE A FLOATING COPY (ghost needle)
+    ghost = el.cloneNode(true);
+    ghost.style.position = "fixed";
+    ghost.style.left = rect.left + "px";
+    ghost.style.top = rect.top + "px";
+    ghost.style.zIndex = "9999";
+    ghost.style.pointerEvents = "none";   // ← IMPORTANT!!
+    ghost.classList.add("dragging");
+
+    // Remove labels inside ghost
+    const label = ghost.querySelector(".dropper-label");
+    if (label) label.remove();
+
+    document.body.appendChild(ghost);
   }, { passive: false });
 
   el.addEventListener("touchmove", e => {
@@ -687,38 +704,39 @@ function enableTouchDrag(el, type) {
     e.preventDefault();
 
     const t = e.touches[0];
-    el.style.position = "fixed";
-    el.style.left = (t.clientX - offsetX) + "px";
-    el.style.top = (t.clientY - offsetY) + "px";
-    el.style.zIndex = "9999";
+
+    ghost.style.left = (t.clientX - offsetX) + "px";
+    ghost.style.top  = (t.clientY - offsetY) + "px";
   }, { passive: false });
 
   el.addEventListener("touchend", e => {
     if (!dragging) return;
     dragging = false;
-
-    el.classList.remove("dragging");
+    e.preventDefault();
 
     const t = e.changedTouches[0];
-    const dropTarget = document.elementFromPoint(t.clientX, t.clientY);
 
-    // If dropped on a valid partition → simulate your existing DROP event
+    // Temporarily hide ghost to detect element underneath
+    ghost.style.display = "none";
+    const dropTarget = document.elementFromPoint(t.clientX, t.clientY);
+    ghost.style.display = "";
+
+    // If dropped on a partition → trigger real drop
     if (dropTarget && dropTarget.closest(".partition")) {
       const wrap = dropTarget.closest(".well-wrap");
       simulateDrop(type, wrap);
     }
 
-    // snap back (same behavior as your dragSnapBack)
-    el.style.position = "";
-    el.style.left = "";
-    el.style.top = "";
-    el.style.zIndex = "";
+    // Remove ghost
+    ghost.remove();
+    ghost = null;
+
+    // Snap animation on real element
     el.classList.add("snap");
     setTimeout(() => el.classList.remove("snap"), 460);
   }, { passive: false });
 }
 
-/* Simulate your existing drop event using your own drop logic */
 function simulateDrop(type, wrap) {
   if (!wrap) return;
   const event = new Event("drop", { bubbles: true });
@@ -728,7 +746,7 @@ function simulateDrop(type, wrap) {
   wrap.querySelector(".partition").dispatchEvent(event);
 }
 
-/* Enable touch-drag for all droppers & blood sample */
+/* Enable touch drag */
 enableTouchDrag(dropperA, "A");
 enableTouchDrag(dropperB, "B");
 enableTouchDrag(dropperD, "D");
