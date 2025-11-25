@@ -655,3 +655,81 @@ nextSampleBtn.addEventListener("click", () => {
 /* initialize */
 setModeFull();
 newPatient();
+
+/* ================================
+   ANDROID TOUCH-DRAG SUPPORT
+   (Option A – keeps all your logic)
+   ================================ */
+
+function enableTouchDrag(el, type) {
+  if (!el) return;
+
+  let dragging = false;
+  let offsetX = 0, offsetY = 0;
+
+  el.addEventListener("touchstart", e => {
+    // Android Chrome sometimes fires ghost mouse events → stop them
+    e.preventDefault();
+
+    const t = e.touches[0];
+    const rect = el.getBoundingClientRect();
+
+    offsetX = t.clientX - rect.left;
+    offsetY = t.clientY - rect.top;
+    dragging = true;
+
+    el.classList.add("dragging");
+    el.style.transition = "none";
+  }, { passive: false });
+
+  el.addEventListener("touchmove", e => {
+    if (!dragging) return;
+    e.preventDefault();
+
+    const t = e.touches[0];
+    el.style.position = "fixed";
+    el.style.left = (t.clientX - offsetX) + "px";
+    el.style.top = (t.clientY - offsetY) + "px";
+    el.style.zIndex = "9999";
+  }, { passive: false });
+
+  el.addEventListener("touchend", e => {
+    if (!dragging) return;
+    dragging = false;
+
+    el.classList.remove("dragging");
+
+    const t = e.changedTouches[0];
+    const dropTarget = document.elementFromPoint(t.clientX, t.clientY);
+
+    // If dropped on a valid partition → simulate your existing DROP event
+    if (dropTarget && dropTarget.closest(".partition")) {
+      const wrap = dropTarget.closest(".well-wrap");
+      simulateDrop(type, wrap);
+    }
+
+    // snap back (same behavior as your dragSnapBack)
+    el.style.position = "";
+    el.style.left = "";
+    el.style.top = "";
+    el.style.zIndex = "";
+    el.classList.add("snap");
+    setTimeout(() => el.classList.remove("snap"), 460);
+  }, { passive: false });
+}
+
+/* Simulate your existing drop event using your own drop logic */
+function simulateDrop(type, wrap) {
+  if (!wrap) return;
+  const event = new Event("drop", { bubbles: true });
+  event.dataTransfer = {
+    getData: () => type
+  };
+  wrap.querySelector(".partition").dispatchEvent(event);
+}
+
+/* Enable touch-drag for all droppers & blood sample */
+enableTouchDrag(dropperA, "A");
+enableTouchDrag(dropperB, "B");
+enableTouchDrag(dropperD, "D");
+enableTouchDrag(bloodSample, "blood");
